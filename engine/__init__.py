@@ -1,3 +1,5 @@
+# IPTV MindApp Engine
+
 from typing import Optional, List, Dict
 from loguru import logger
 from .fast_parser import parse_m3u_fast
@@ -179,5 +181,3 @@ async def fetch_xtream_channels(config: Dict) -> List[Dict]:
     # In a real implementation, this would use the host, username, and password
     # to fetch channels from the Xtream Codes API.
     return []
-
-# IPTV MindApp Engine
