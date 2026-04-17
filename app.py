@@ -1,3 +1,6 @@
+"""
+IPTV MindApp – Backend Only (FastAPI)
+"""
 import asyncio
 import os
 import time
@@ -14,6 +17,7 @@ from engine.aggregator import aggregate_all_sources
 from engine.cleaner import clean_channels
 from engine.cache import channel_cache, stream_cache
 
+# -------------------- CONFIG --------------------
 CHANNEL_CACHE_KEY = "channels_v1"
 STREAM_TEST_TIMEOUT = 3.0
 
@@ -25,6 +29,7 @@ app_state = {
     "startup_done": False,
 }
 
+# -------------------- LIFESPAN --------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 IPTV MindApp starting up...")
@@ -32,17 +37,22 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("👋 IPTV MindApp shutting down")
 
+# -------------------- APP INIT --------------------
 app = FastAPI(title="IPTV MindApp", version="3.0.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# Serve static files (index.html, style.css, app.js)
 if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# -------------------- PYDANTIC MODELS --------------------
 class RefreshRequest(BaseModel):
     extra_m3u_urls: Optional[list[str]] = None
     xtream_host: Optional[str] = None
     xtream_username: Optional[str] = None
     xtream_password: Optional[str] = None
 
+# -------------------- CORE FUNCTIONS --------------------
 async def run_full_scan(extra_m3u_urls=None, xtream_config=None):
     if app_state["scan_in_progress"]:
         return
@@ -64,13 +74,15 @@ async def run_full_scan(extra_m3u_urls=None, xtream_config=None):
 async def get_cached_channels():
     return await channel_cache.get(CHANNEL_CACHE_KEY)
 
+# -------------------- API ENDPOINTS --------------------
 @app.get("/", response_class=HTMLResponse)
 async def index():
+    """Serve the frontend interface from static/index.html"""
     try:
-        with open("static/index.html") as f:
+        with open("static/index.html", "r", encoding="utf-8") as f:
             return f.read()
-    except:
-        return "<h1>IPTV MindApp</h1><p>Static files missing</p>"
+    except FileNotFoundError:
+        return HTMLResponse("<h1>IPTV MindApp</h1><p>Please ensure static/index.html exists</p>")
 
 @app.get("/channels")
 async def list_channels(category: Optional[str] = None, search: Optional[str] = None,
@@ -97,12 +109,10 @@ async def watch_channel(channel_id: int):
     streams = ch.get("streams", [])
     if not streams:
         raise HTTPException(503, "No streams")
-    # اختبار أول تدفق فقط (سيتم إعادة الاختبار كل 10 دقائق)
     cache_key = f"stream_test:{channel_id}"
     cached = await stream_cache.get(cache_key)
     if cached:
         return JSONResponse({"stream_url": cached["working_url"], "backups": cached.get("backups", [])})
-    # اختبار سريع لأول رابط
     import aiohttp
     working = None
     for url in streams[:3]:
@@ -150,6 +160,7 @@ async def categories():
     cats = [{"name": "All", "count": len(channels)}] + [{"name": k, "count": v} for k, v in sorted(counts.items())]
     return JSONResponse({"categories": cats})
 
+# -------------------- ENTRY POINT --------------------
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=False)
